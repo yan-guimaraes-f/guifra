@@ -2,22 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/**/*.js",
+      "source": "api/**/*.js",
       "use": "@vercel/node"
     },
     {
-      "src": "public/**",
+      "source": "public/**",
       "use": "@vercel/static"
     }
   ],
   "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "/public/$1"
+      "source": "/(.*)",
+      "destination": "/public/$1"
     }
   ],
   "env": {
@@ -44,3 +44,4 @@
   ]
 
 }
+
