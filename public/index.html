@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>GuiFra - Assistente IA Gratuito</title>
+    <meta name="description" content="Converse com IA avançada. 100% gratuito, sem cadastro.">
+    
+    <!-- PWA -->
+    <meta name="theme-color" content="#6366f1">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>">
+    
+    <!-- Marked.js + DOMPurify -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0a0;
+            --border: #333;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .welcome {
+            max-width: 700px;
+            margin: 60px auto;
+            text-align: center;
+        }
+
+        .welcome-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .welcome-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .welcome-subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .suggestions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .suggestion {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .suggestion:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .suggestion-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .suggestion-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .message {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            max-width: 800px;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            margin-left: auto;
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .message.user .avatar {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .message.assistant .avatar {
+            background: var(--bg-secondary);
+        }
+
+        .content {
+            flex: 1;
+        }
+
+        .message-text {
+            font-size: 15px;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-text {
+            background: var(--bg-secondary);
+            padding: 12px 16px;
+            border-radius: 12px;
+        }
+
+        .message-text pre {
+            background: var(--bg-secondary);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+
+        .message-text code {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .message-text p {
+            margin-bottom: 8px;
+        }
+
+        .typing {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+        }
+
+        .typing span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            animation: typing 1.4s infinite;
+        }
+
+        .typing span:nth-child(2) { animation-delay: 0.2s; }
+        .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { opacity: 0.3; }
+            30% { opacity: 1; transform: translateY(-8px); }
+        }
+
+        .input-area {
+            padding: 24px;
+            border-top: 1px solid var(--border);
+        }
+
+        .input-box {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 8px;
+            transition: border-color 0.2s;
+        }
+
+        .input-box:focus-within {
+            border-color: var(--accent);
+        }
+
+        textarea {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: inherit;
+            resize: none;
+            max-height: 200px;
+            padding: 8px;
+            outline: none;
+        }
+
+        textarea::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .send-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background: var(--accent-hover);
+            transform: scale(1.05);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .suggestions {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo">
+                ✨ GuiFra
+            </div>
+            <div class="status">
+                <div class="status-dot"></div>
+                <span>Online</span>
+            </div>
+        </header>
+
+        <div class="messages" id="messages">
+            <div class="welcome">
+                <div class="welcome-icon">✨</div>
+                <h1 class="welcome-title">GuiFra Premium</h1>
+                <p class="welcome-subtitle">Seu assistente IA de última geração • Totalmente gratuito</p>
+
+                <div class="suggestions">
+                    <div class="suggestion" onclick="sendSuggestion('Explique como funciona a inteligência artificial')">
+                        <div class="suggestion-icon">💡</div>
+                        <div class="suggestion-text">Explicar conceitos</div>
+                    </div>
+                    
+                    <div class="suggestion" onclick="sendSuggestion('Escreva um código Python para análise de dados')">
+                        <div class="suggestion-icon">💻</div>
+                        <div class="suggestion-text">Ajuda com código</div>
+                    </div>
+                    
+                    <div class="suggestion" onclick="sendSuggestion('Me ajude a criar um plano de estudos eficiente')">
+                        <div class="suggestion-icon">📚</div>
+                        <div class="suggestion-text">Plano de estudos</div>
+                    </div>
+                    
+                    <div class="suggestion" onclick="sendSuggestion('Me conte uma curiosidade científica interessante')">
+                        <div class="suggestion-icon">🔬</div>
+                        <div class="suggestion-text">Curiosidades</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-box">
+                <textarea 
+                    id="input" 
+                    placeholder="Digite sua mensagem..."
+                    rows="1"
+                    onkeydown="handleKeyPress(event)"
+                    oninput="autoResize(this)"
+                ></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+            </div>
+            <div class="footer">
+                GuiFra pode cometer erros. Verifique informações importantes.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let messages = [];
+        let isLoading = false;
+
+        async function sendMessage() {
+            const input = document.getElementById('input');
+            const message = input.value.trim();
+            
+            if (!message || isLoading) return;
+
+            input.value = '';
+            input.style.height = 'auto';
+
+            messages.push({ role: 'user', content: message });
+            addMessage('user', message);
+
+            isLoading = true;
+            document.getElementById('sendBtn').disabled = true;
+            addTyping();
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages })
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                removeTyping();
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let assistantMessage = '';
+                let messageDiv = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            
+                            if (data.content) {
+                                assistantMessage += data.content;
+                                
+                                if (!messageDiv) {
+                                    messages.push({ role: 'assistant', content: assistantMessage });
+                                    messageDiv = addMessage('assistant', assistantMessage);
+                                } else {
+                                    updateMessage(messageDiv, assistantMessage);
+                                }
+                            }
+                            
+                            if (data.error) throw new Error(data.error);
+                        }
+                    }
+                }
+
+            } catch (error) {
+                removeTyping();
+                console.error('Erro:', error);
+                const errorMsg = `❌ Erro: ${error.message}`;
+                messages.push({ role: 'assistant', content: errorMsg });
+                addMessage('assistant', errorMsg);
+            } finally {
+                isLoading = false;
+                document.getElementById('sendBtn').disabled = false;
+                input.focus();
+            }
+        }
+
+        function addMessage(role, content) {
+            const container = document.getElementById('messages');
+            const welcome = container.querySelector('.welcome');
+            if (welcome) welcome.remove();
+
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            
+            const avatar = role === 'user' ? '👤' : '🤖';
+            const html = role === 'assistant' 
+                ? DOMPurify.sanitize(marked.parse(content))
+                : escapeHtml(content);
+
+            div.innerHTML = `
+                <div class="avatar">${avatar}</div>
+                <div class="content">
+                    <div class="message-text">${html}</div>
+                </div>
+            `;
+
+            container.appendChild(div);
+            scrollToBottom();
+            return div;
+        }
+
+        function updateMessage(div, content) {
+            const textDiv = div.querySelector('.message-text');
+            textDiv.innerHTML = DOMPurify.sanitize(marked.parse(content));
+            scrollToBottom();
+        }
+
+        function addTyping() {
+            const container = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.id = 'typing';
+            div.className = 'message assistant';
+            div.innerHTML = `
+                <div class="avatar">🤖</div>
+                <div class="content">
+                    <div class="typing">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            scrollToBottom();
+        }
+
+        function removeTyping() {
+            const typing = document.getElementById('typing');
+            if (typing) typing.remove();
+        }
+
+        function sendSuggestion(text) {
+            document.getElementById('input').value = text;
+            sendMessage();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('messages');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(() => console.log('✅ SW registrado'))
+                .catch(err => console.log('❌ SW falhou:', err));
+        }
+    </script>
+</body>
+</html>
