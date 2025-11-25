@@ -7,13 +7,7 @@
     "dev": "vercel dev",
     "deploy": "vercel --prod"
   },
-  "keywords": [
-    "ai",
-    "chatbot",
-    "groq",
-    "vercel",
-    "llama"
-  ],
+  "keywords": ["ai", "chatbot", "groq", "vercel", "llama"],
   "author": "Seu Nome",
   "license": "MIT",
   "dependencies": {
@@ -23,9 +17,6 @@
     "vercel": "^33.0.0"
   },
   "engines": {
-    "node": "18.x"
-  },
-  "volta": {
-    "node": "18.20.4"
+    "node": "22.x"
   }
 }
