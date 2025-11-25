@@ -1,11 +1,10 @@
 /**
- * Chat Endpoint com Streaming
+ * Chat Endpoint com Streaming — Vercel Edge Runtime
  * POST /api/chat
  */
 
 import Groq from 'groq-sdk';
 
-// System prompt
 const SYSTEM_PROMPT = `Você é o GuiFra, um assistente pessoal de IA de última geração, criado para ser:
 
 🎯 CARACTERÍSTICAS:
@@ -31,16 +30,14 @@ const SYSTEM_PROMPT = `Você é o GuiFra, um assistente pessoal de IA de última
 
 Responda SEMPRE em português brasileiro, de forma clara e útil.`;
 
-// Rate limiting simples (em memória)
+// Rate limiting simples (Edge-compatible: usa Map global)
 const requestCounts = new Map();
 const MAX_REQUESTS_PER_MINUTE = 20;
 
 function checkRateLimit(ip) {
   const now = Date.now();
   const userRequests = requestCounts.get(ip) || [];
-  
-  // Remove requisições antigas (>1 minuto)
-  const recentRequests = userRequests.filter(time => now - time < 60000);
+  const recentRequests = userRequests.filter(time => now - time < 60_000);
   
   if (recentRequests.length >= MAX_REQUESTS_PER_MINUTE) {
     return false;
@@ -51,118 +48,148 @@ function checkRateLimit(ip) {
   return true;
 }
 
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+// ✅ Edge Runtime: exporta uma função que recebe Request e retorna Response
+export default async function handler(request) {
+  // CORS headers (para todos os métodos)
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin',
+  };
 
-  // Handle OPTIONS
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // Handle OPTIONS (preflight)
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   // Only allow POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
-    // Verifica API key
+    // Valida API key
     if (!process.env.GROQ_API_KEY) {
-      return res.status(500).json({
-        error: 'API key not configured',
-        message: 'Configure GROQ_API_KEY no Vercel'
-      });
+      return new Response(
+        JSON.stringify({
+          error: 'API key not configured',
+          message: 'Configure GROQ_API_KEY no painel do Vercel'
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Rate limiting
-    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
+    // Obtém IP (Edge-safe)
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+
     if (!checkRateLimit(ip)) {
-      return res.status(429).json({
-        error: 'Rate limit exceeded',
-        message: `Máximo de ${MAX_REQUESTS_PER_MINUTE} requisições por minuto`
-      });
+      return new Response(
+        JSON.stringify({
+          error: 'Rate limit exceeded',
+          message: `Máximo de ${MAX_REQUESTS_PER_MINUTE} requisições por minuto`
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Valida body
-    const { messages } = req.body;
-    
+    // Parse body
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { messages } = body;
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({
-        error: 'Invalid request',
-        message: 'messages array is required'
-      });
+      return new Response(
+        JSON.stringify({ error: 'messages array is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Valida estrutura das mensagens
     for (const msg of messages) {
       if (!msg.role || !msg.content) {
-        return res.status(400).json({
-          error: 'Invalid message format',
-          message: 'Each message must have role and content'
-        });
+        return new Response(
+          JSON.stringify({ error: 'Each message must have role and content' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
 
-    // Prepara mensagens com system prompt
+    // Prepara mensagens
     const fullMessages = [
       { role: 'system', content: SYSTEM_PROMPT },
       ...messages
     ];
 
     // Inicializa Groq
-    const groq = new Groq({
-      apiKey: process.env.GROQ_API_KEY
-    });
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    // Configura streaming
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    // 🔥 STREAMING com ReadableStream
+    const encoder = new TextEncoder();
 
-    // Cria stream
-    const stream = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: fullMessages,
-      temperature: 0.7,
-      max_tokens: 8000,
-      stream: true
-    });
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const completion = await groq.chat.completions.create({
+            model: 'llama-3.3-70b-versatile', // ✅ Modelo mais poderoso
+            messages: fullMessages,
+            temperature: 0.7,
+            max_tokens: 8000,
+            stream: true,
+          });
 
-    // Envia chunks
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      
-      if (content) {
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          for await (const chunk of completion) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+              // Formato compatível com seu frontend: "data: {...}\n\n"
+              const payload = `data: ${JSON.stringify({ content })}\n\n`;
+              controller.enqueue(encoder.encode(payload));
+            }
+          }
+
+          // Sinal de fim — seu frontend espera [DONE] ou done:true
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
+          controller.close();
+
+        } catch (error) {
+          console.error('Stream error:', error);
+          const errorMsg = JSON.stringify({ error: error.message || 'Erro interno' });
+          controller.enqueue(encoder.encode(`data: ${errorMsg}\n\n`));
+          controller.close();
+        }
       }
-    }
+    });
 
-    // Sinal de conclusão
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-    res.end();
+    // ✅ Resposta com streaming
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no', // importante para Nginx/proxy
+      },
+    });
 
   } catch (error) {
-    console.error('Erro no chat:', error);
-    
-    // Se ainda não enviou headers, envia JSON de erro
-    if (!res.headersSent) {
-      return res.status(500).json({
-        error: 'Internal server error',
-        message: error.message
-      });
-    }
-    
-    // Se já está em streaming, envia erro via SSE
-    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-    res.end();
+    console.error('Handler error:', error);
+    return new Response(
+      JSON.stringify({ error: 'Internal server error', message: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 }
 
-// Configuração do Vercel para desabilitar body parsing (streaming)
+// ✅ Configuração para Edge Runtime (obrigatório)
 export const config = {
-  api: {
-    bodyParser: true
-  }
+  runtime: 'edge',
 };
