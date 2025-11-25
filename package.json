@@ -1,22 +1,10 @@
 {
   "name": "guifra",
   "version": "2.0.0",
-  "description": "Assistente IA com Groq no Vercel",
-  "main": "api/chat.js",
-  "scripts": {
-    "dev": "vercel dev",
-    "deploy": "vercel --prod"
-  },
-  "keywords": ["ai", "chatbot", "groq", "vercel", "llama"],
-  "author": "Seu Nome",
-  "license": "MIT",
-  "dependencies": {
-    "groq-sdk": "^0.7.0"
-  },
-  "devDependencies": {
-    "vercel": "^33.0.0"
-  },
   "engines": {
     "node": "22.x"
+  },
+  "dependencies": {
+    "groq-sdk": "^0.7.0"
   }
 }
